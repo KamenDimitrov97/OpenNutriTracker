@@ -4,6 +4,7 @@ import 'package:opennutritracker/features/diary/diary_page.dart';
 import 'package:opennutritracker/core/presentation/widgets/home_appbar.dart';
 import 'package:opennutritracker/features/home/home_page.dart';
 import 'package:opennutritracker/core/presentation/widgets/main_appbar.dart';
+import 'package:opennutritracker/core/presentation/widgets/chat_bubble.dart';
 import 'package:opennutritracker/features/profile/profile_page.dart';
 import 'package:opennutritracker/generated/l10n.dart';
 
@@ -38,37 +39,49 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: _appbarPages[_selectedPageIndex],
-      body: _bodyPages[_selectedPageIndex],
-      floatingActionButton: _selectedPageIndex == 0
-          ? FloatingActionButton(
-              onPressed: () => _onFabPressed(context),
-              tooltip: S.of(context).addLabel,
-              child: const Icon(Icons.add),
-            )
-          : null,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedPageIndex,
-        onDestinationSelected: _setPage,
-        destinations: [
-          NavigationDestination(
-              icon: _selectedPageIndex == 0
-                  ? const Icon(Icons.home)
-                  : const Icon(Icons.home_outlined),
-              label: S.of(context).homeLabel),
-          NavigationDestination(
-              icon: _selectedPageIndex == 1
-                  ? const Icon(Icons.book)
-                  : const Icon((Icons.book_outlined)),
-              label: S.of(context).diaryLabel),
-          NavigationDestination(
-              icon: _selectedPageIndex == 2
-                  ? const Icon(Icons.account_circle)
-                  : const Icon(Icons.account_circle_outlined),
-              label: S.of(context).profileLabel)
-        ],
-      ),
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: _appbarPages[_selectedPageIndex],
+          body: _bodyPages[_selectedPageIndex],
+          floatingActionButton: _selectedPageIndex == 0
+              ? FloatingActionButton(
+                  onPressed: () => _onFabPressed(context),
+                  tooltip: S.of(context).addLabel,
+                  child: const Icon(Icons.add),
+                )
+              : null,
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _selectedPageIndex,
+            onDestinationSelected: _setPage,
+            destinations: [
+              NavigationDestination(
+                  icon: _selectedPageIndex == 0
+                      ? const Icon(Icons.home)
+                      : const Icon(Icons.home_outlined),
+                  label: S.of(context).homeLabel),
+              NavigationDestination(
+                  icon: _selectedPageIndex == 1
+                      ? const Icon(Icons.book)
+                      : const Icon((Icons.book_outlined)),
+                  label: S.of(context).diaryLabel),
+              NavigationDestination(
+                  icon: _selectedPageIndex == 2
+                      ? const Icon(Icons.account_circle)
+                      : const Icon(Icons.account_circle_outlined),
+                  label: S.of(context).profileLabel)
+            ],
+          ),
+        ),
+        if (_selectedPageIndex == 0 || _selectedPageIndex == 1)
+          // Offset the chat bubble on Home to avoid FAB overlap
+          ChatBubbleLauncher(
+            padding: EdgeInsets.only(
+              right: 16,
+              bottom: _selectedPageIndex == 0 ? 96 : 16,
+            ),
+          ),
+      ],
     );
   }
 

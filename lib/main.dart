@@ -7,12 +7,14 @@ import 'package:opennutritracker/core/data/repository/config_repository.dart';
 import 'package:opennutritracker/core/domain/entity/app_theme_entity.dart';
 import 'package:opennutritracker/core/presentation/main_screen.dart';
 import 'package:opennutritracker/core/presentation/widgets/image_full_screen.dart';
+import 'package:opennutritracker/core/presentation/widgets/chat_bubble.dart';
 import 'package:opennutritracker/core/styles/color_schemes.dart';
 import 'package:opennutritracker/core/styles/fonts.dart';
 import 'package:opennutritracker/core/utils/env.dart';
 import 'package:opennutritracker/core/utils/locator.dart';
 import 'package:opennutritracker/core/utils/logger_config.dart';
 import 'package:opennutritracker/core/utils/navigation_options.dart';
+import 'package:opennutritracker/core/utils/nav_key.dart';
 import 'package:opennutritracker/core/utils/theme_mode_provider.dart';
 import 'package:opennutritracker/features/activity_detail/activity_detail_screen.dart';
 import 'package:opennutritracker/features/add_meal/presentation/add_meal_screen.dart';
@@ -72,6 +74,7 @@ class OpenNutriTrackerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       onGenerateTitle: (context) => S.of(context).appTitle,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
