@@ -7,6 +7,7 @@ import 'package:opennutritracker/core/utils/hive_db_provider.dart';
 class SecureAppStorageProvider {
   static const _sharedPrefsName = "SharedPrefs";
   static const _hiveEncryptionTag = "HiveEncryptionTag";
+  static const _anthropicApiKeyTag = "AnthropicApiKeyTag";
 
   static const _androidOptions = AndroidOptions(
     storageCipherAlgorithm: StorageCipherAlgorithm.AES_CBC_PKCS7Padding,
@@ -39,5 +40,19 @@ class SecureAppStorageProvider {
       );
     }
     return encryptionKey;
+  }
+
+  // --- Anthropic API key (NutriAssist AI meal logging) ---
+
+  Future<void> setAnthropicApiKey(String apiKey) async {
+    await _secureStorage.write(key: _anthropicApiKeyTag, value: apiKey);
+  }
+
+  Future<String?> getAnthropicApiKey() async {
+    return _secureStorage.read(key: _anthropicApiKeyTag);
+  }
+
+  Future<bool> hasAnthropicApiKey() async {
+    return _secureStorage.containsKey(key: _anthropicApiKeyTag);
   }
 }

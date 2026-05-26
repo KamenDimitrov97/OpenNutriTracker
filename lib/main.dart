@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:opennutritracker/core/presentation/widgets/claude_test_bubble.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -195,6 +196,15 @@ class OpenNutriTrackerApp extends StatelessWidget {
     return MaterialApp(
       onGenerateTitle: (context) => S.of(context).appTitle,
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        // Float the Claude test bubble on top of every screen.
+        return Stack(
+          children: [
+            if (child != null) child,
+            const ClaudeTestBubble(),
+          ],
+        );
+      },
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: lightScheme,
