@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:opennutritracker/core/data/data_source/anthropic_data_source.dart';
+import 'package:opennutritracker/core/domain/entity/intake_type_entity.dart';
+import 'package:opennutritracker/core/domain/usecase/add_intake_usecase.dart';
+import 'package:opennutritracker/core/domain/usecase/add_tracked_day_usecase.dart';
+import 'package:opennutritracker/core/domain/usecase/get_kcal_goal_usecase.dart';
+import 'package:opennutritracker/core/domain/usecase/get_macro_goal_usecase.dart';
+import 'package:opennutritracker/core/domain/usecase/log_parsed_meal_usecase.dart';
+import 'package:opennutritracker/core/utils/locator.dart';
 import 'package:opennutritracker/core/utils/secure_app_storage_provider.dart';
+import 'package:opennutritracker/features/diary/presentation/bloc/calendar_day_bloc.dart';
+import 'package:opennutritracker/features/home/presentation/bloc/home_bloc.dart';
 
 /// Draggable floating button shown on top of every screen (wired in through
 /// `MaterialApp.builder` in main.dart). Tap it to describe a meal in natural
-/// language; Claude parses it into structured food items. Everything is drawn
-/// inline because the bubble lives ABOVE the app's Navigator.
+/// language; Claude parses it, and you can log the items straight to the diary.
+/// Drawn inline because the bubble lives ABOVE the app's Navigator.
 class ClaudeTestBubble extends StatefulWidget {
   const ClaudeTestBubble({super.key});
 
@@ -20,6 +29,12 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
   final SecureAppStorageProvider _storage = SecureAppStorageProvider();
   late final AnthropicDataSource _anthropic =
       AnthropicDataSource(_storage, http.Client());
+  late final LogParsedMealUsecase _logger = LogParsedMealUsecase(
+    locator<AddIntakeUsecase>(),
+    locator<AddTrackedDayUsecase>(),
+    locator<GetKcalGoalUsecase>(),
+    locator<GetMacroGoalUsecase>(),
+  );
   final TextEditingController _keyController = TextEditingController();
   final TextEditingController _mealController = TextEditingController();
 
@@ -29,7 +44,17 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
   bool _obscureKey = true;
   bool _askingMeal = false;
   List<ParsedFoodItem>? _parsedItems;
+  IntakeTypeEntity _selectedType = _defaultTypeForNow();
   String? _errorMessage;
+  String? _successMessage;
+
+  static IntakeTypeEntity _defaultTypeForNow() {
+    final hour = DateTime.now().hour;
+    if (hour < 11) return IntakeTypeEntity.breakfast;
+    if (hour < 15) return IntakeTypeEntity.lunch;
+    if (hour < 21) return IntakeTypeEntity.dinner;
+    return IntakeTypeEntity.snack;
+  }
 
   @override
   void dispose() {
@@ -61,7 +86,7 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
     if (!mounted) return;
     setState(() {
       _askingForKey = false;
-      _askingMeal = true; // continue straight to the meal box
+      _askingMeal = true;
     });
   }
 
@@ -84,6 +109,37 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
     }
   }
 
+  Future<void> _logMeal() async {
+    final items = _parsedItems;
+    if (items == null || items.isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      await _logger.logItems(items, _selectedType, DateTime.now());
+      _refreshDiaryViews();
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _parsedItems = null;
+        _successMessage =
+            'Logged ${items.length} item(s) to ${_typeLabel(_selectedType)}.';
+      });
+    } catch (e) {
+      _showError('Couldn\'t log: $e');
+    }
+  }
+
+  /// Best-effort: nudge the Home and Diary screens to reload from Hive so the
+  /// new entries appear immediately. Guarded because these blocs may not be
+  /// instantiated yet depending on where the user is.
+  void _refreshDiaryViews() {
+    try {
+      locator<HomeBloc>().add(const LoadItemsEvent());
+    } catch (_) {}
+    try {
+      locator<CalendarDayBloc>().add(const RefreshCalendarDayEvent());
+    } catch (_) {}
+  }
+
   void _showError(String message) {
     if (!mounted) return;
     setState(() {
@@ -99,8 +155,22 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
       _askingMeal = false;
       _parsedItems = null;
       _errorMessage = null;
+      _successMessage = null;
       _mealController.clear();
     });
+  }
+
+  String _typeLabel(IntakeTypeEntity type) {
+    switch (type) {
+      case IntakeTypeEntity.breakfast:
+        return 'Breakfast';
+      case IntakeTypeEntity.lunch:
+        return 'Lunch';
+      case IntakeTypeEntity.dinner:
+        return 'Dinner';
+      case IntakeTypeEntity.snack:
+        return 'Snack';
+    }
   }
 
   // --- UI ---
@@ -113,7 +183,8 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
     final panelOpen = _askingForKey ||
         _askingMeal ||
         _parsedItems != null ||
-        _errorMessage != null;
+        _errorMessage != null ||
+        _successMessage != null;
 
     return Stack(
       children: [
@@ -128,8 +199,8 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
         if (_askingMeal) _buildMealPanel(theme, media),
         if (_parsedItems != null) _buildParsedPanel(theme),
         if (_errorMessage != null) _buildErrorPanel(theme),
+        if (_successMessage != null) _buildSuccessPanel(theme),
 
-        // The draggable bubble.
         Positioned(
           left: _offset.dx,
           top: _offset.dy,
@@ -149,7 +220,6 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
                 });
               },
               onTap: _onTap,
-              // Long-press to (re-)enter the API key, e.g. after a 401.
               onLongPress: () => setState(() => _askingForKey = true),
               child: Material(
                 elevation: 6,
@@ -309,7 +379,7 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
             ),
             const SizedBox(height: 12),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
+              constraints: const BoxConstraints(maxHeight: 240),
               child: SingleChildScrollView(
                 child: Column(
                   children: [
@@ -323,11 +393,41 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
                 style: theme.textTheme.titleMedium,
                 textAlign: TextAlign.right),
             const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              // Phase 4 will add a "Log to diary" button next to Close.
-              child: TextButton(
-                  onPressed: _dismissPanels, child: const Text('Close')),
+            Text('Log as', style: theme.textTheme.labelLarge),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final type in IntakeTypeEntity.values)
+                  ChoiceChip(
+                    label: Text(_typeLabel(type)),
+                    selected: _selectedType == type,
+                    onSelected: (_) => setState(() => _selectedType = type),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                    onPressed: _dismissPanels, child: const Text('Close')),
+                const SizedBox(width: 8),
+                Semantics(
+                  identifier: 'ai-log-confirm',
+                  child: FilledButton.icon(
+                    onPressed: _loading ? null : _logMeal,
+                    icon: _loading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.add),
+                    label: const Text('Log to diary'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -362,6 +462,37 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
     );
   }
 
+  Widget _buildSuccessPanel(ThemeData theme) {
+    return Center(
+      child: _PanelCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.green),
+                const SizedBox(width: 8),
+                Expanded(
+                  child:
+                      Text('Logged!', style: theme.textTheme.titleLarge),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(_successMessage ?? ''),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                  onPressed: _dismissPanels, child: const Text('Done')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildErrorPanel(ThemeData theme) {
     return Center(
       child: _PanelCard(
@@ -374,7 +505,7 @@ class _ClaudeTestBubbleState extends State<ClaudeTestBubble> {
                 Icon(Icons.error, color: theme.colorScheme.error),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('Couldn\'t parse that',
+                  child: Text('Something went wrong',
                       style: theme.textTheme.titleLarge),
                 ),
               ],
